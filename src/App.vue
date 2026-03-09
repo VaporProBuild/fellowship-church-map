@@ -1,10 +1,18 @@
 <template>
+  <div v-if="loading" class="spinner-overlay">
+    <div class="spinner"></div>
+  </div>
   <div class="main-bg">
     <div class="header">
       NOTICE: This is a Prototype for the Fellowship of Evangelical Baptists (FEB) Church Finder in Central Canada. It is built using Vue.js and Leaflet for mapping. The church data is sourced from a JSON file containing information about 70% of FEB churches, including their names, addresses, phone numbers, and geographic coordinates.
     </div>
     <div class="intro">
-      <h1>Find a Church Near You!</h1>
+      <div class="share-parent">
+        <button class="share-button" @click="sharePage">
+          Share
+        </button>
+      </div>
+      <span class="title">Find a Church Near You!</span>
       <p>
         Welcome to the Feb Central Church Finder! This site helps you connect with churches near you that are part of the Fellowship of Evangelical Baptists (FEB) in Central Canada.<br>
         Enter your address or use your location to discover the closest FEB churches and get connected.
@@ -17,8 +25,12 @@
         <button @click="searchByAddress">Search</button>
       </div>
     </center-div>
+    <div class="radius-slider">
+      <label for="radius">Radius: {{ radius }} km</label>
+      <input type="range" id="radius" min="3" max="100" v-model="radius" @input="updateRadius" />
+    </div>
     <div class="map-container">
-      <l-map :zoom="mapZoom" :center="mapCenter" class="map">
+      <l-map ref="churchMap" :zoom="mapZoom" :center="mapCenter" class="map">
         <l-tile-layer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; <a href='https://osm.org/copyright'>OpenStreetMap</a> contributors"
@@ -41,13 +53,21 @@
         </l-marker>
       </l-map>
     </div>
-    <div v-if="closestChurches.length">
-      <h2>Closest Churches:</h2>
-      <ul>
-        <li v-for="church in closestChurches" :key="church.name">
+    <div v-if="closestChurches.length" class="closest-churches">
+      <span class="closest-church-title">{{ closestChurches.length }} Churches Within {{ radius }} km:</span>
+        <div v-for="church in closestChurches" :key="church.name" class="church-near-me">
           {{ church.name }} - {{ church.address }} ({{ church.distance.toFixed(2) }} km away)
-        </li>
-      </ul>
+          <div>
+            <button @click="notSetup">Website</button>
+            <button @click="notSetup">Directions</button>
+          </div>
+        </div>
+    </div>
+    <div v-else>
+      <span class="closest-church-title">No Churches Within {{ radius }} km please increase the radius.</span>
+    </div>
+    <div class="footer">
+      This is a prototype built by Schaefer Software. For feedback or questions, please contact <a href="mailto:schaefersoftwaresolutions@gmail.com">schaefersoftwaresolutions@gmail.com</a>.
     </div>
   </div>
 </template>
@@ -95,12 +115,14 @@ export default {
       churches: febChurches,
       userLocation: null,
       closestChurches: [],
+      radius: 20,
       showClosest: false,
       mapCenter: [43.7, -79.4],
       mapZoom: 7,
       churchIcon: churchIcon,
       personIcon: personIcon,
-      searchAddress: ''
+      searchAddress: '',
+      loading: false
     }
   },
   computed: {
@@ -110,18 +132,38 @@ export default {
     }
   },
   methods: {
+    async sharePage() {
+      const shareData = {
+        title: 'FEB Church Finder',
+        text: 'Find a Fellowship of Evangelical Baptist church near you.',
+        url: window.location.href
+      };
+
+      if (navigator.share) {
+        try {
+          await navigator.share(shareData);
+        } catch (err) {
+          console.error('Share cancelled', err);
+        }
+      } else {
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          alert('Link copied to clipboard');
+        } catch {
+          alert('Unable to share or copy link');
+        }
+      }
+    },
     findClosestChurches() {
-      console.log('Find Closest Churches button pressed');
+      this.loading = true;
       if (!navigator.geolocation) {
         alert('Geolocation not supported');
+        this.loading = false;
         return;
       }
-      console.log('Attempting to get user location...');
       navigator.geolocation.getCurrentPosition(
         pos => {
-          console.log('User location found:', pos.coords);
           this.userLocation = [pos.coords.latitude, pos.coords.longitude];
-          // Calculate distances
           const distances = this.filteredChurches.map(church => ({
             ...church,
             distance: haversineDistance(
@@ -131,9 +173,9 @@ export default {
               church.longitude
             )
           }));
-          // Sort by distance and take top 5
-          this.closestChurches = distances.sort((a, b) => a.distance - b.distance).slice(0, 5);
-          // Zoom to midpoint between user and closest church
+          this.closestChurches = distances
+            .filter(church => church.distance <= this.radius)
+            .sort((a, b) => a.distance - b.distance);
           if (this.closestChurches.length > 0) {
             const closest = this.closestChurches[0];
             const midLat = (pos.coords.latitude + closest.latitude) / 2;
@@ -144,16 +186,28 @@ export default {
             this.mapCenter = [pos.coords.latitude, pos.coords.longitude];
             this.mapZoom = 12;
           }
+          this.loading = false;
+          this.$nextTick(() => {
+            const mapEl = this.$refs.churchMap?.$el;
+            if (mapEl) {
+              mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
         },
         err => {
           alert('Could not get location. Error: ' + err.message);
-          console.error('Geolocation error:', err);
+          this.loading = false;
         }
       );
     },
+    notSetup() {
+      alert('This feature is not set up yet.');
+    },
     async searchByAddress() {
+      this.loading = true;
       if (!this.searchAddress) {
         alert('Please enter an address');
+        this.loading = false;
         return;
       }
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.searchAddress)}`;
@@ -162,12 +216,12 @@ export default {
         const results = await response.json();
         if (!results.length) {
           alert('Address not found');
+          this.loading = false;
           return;
         }
         const lat = parseFloat(results[0].lat);
         const lon = parseFloat(results[0].lon);
         this.userLocation = [lat, lon];
-        // Calculate distances
         const distances = this.filteredChurches.map(church => ({
           ...church,
           distance: haversineDistance(
@@ -177,8 +231,9 @@ export default {
             church.longitude
           )
         }));
-        this.closestChurches = distances.sort((a, b) => a.distance - b.distance).slice(0, 5);
-        // Zoom to midpoint between user and closest church
+        this.closestChurches = distances
+          .filter(church => church.distance <= this.radius)
+          .sort((a, b) => a.distance - b.distance);
         if (this.closestChurches.length > 0) {
           const closest = this.closestChurches[0];
           const midLat = (lat + closest.latitude) / 2;
@@ -189,16 +244,113 @@ export default {
           this.mapCenter = [lat, lon];
           this.mapZoom = 12;
         }
+        this.loading = false;
+        this.$nextTick(() => {
+          const mapEl = this.$refs.churchMap?.$el;
+          if (mapEl) {
+            mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
       } catch (err) {
         alert('Error searching address');
+        this.loading = false;
         console.error('Address search error:', err);
       }
-    }
+    },
+    updateRadius() {
+      // Recalculate closest churches if userLocation is set
+      if (this.userLocation) {
+        const [lat, lon] = this.userLocation;
+        const distances = this.filteredChurches.map(church => ({
+          ...church,
+          distance: haversineDistance(
+            lat,
+            lon,
+            church.latitude,
+            church.longitude
+          )
+        }));
+        this.closestChurches = distances
+          .filter(church => church.distance <= this.radius)
+          .sort((a, b) => a.distance - b.distance);
+      }
+    },
   }
 }
 </script>
 
 <style scoped>
+.radius-slider {
+  width: 85%;
+  max-width: 900px;
+  margin: 1rem auto 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  font-size: 1.1em;
+  color: var(--c-blue);
+}
+.radius-slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--c-blue);
+  height: 2px;
+}
+.title {
+  color: var(--c-blue);
+  text-align: center;
+  margin: 1em 0 0.5em 0;
+  font-weight: bold;
+  font-size: 1.75rem;
+}
+
+.closest-church-title {
+  color: var(--c-blue);
+  font-weight: bold;
+  font-size: 1.25rem;
+  margin-bottom: 0.5em;
+}
+
+.share-parent {
+  display: flex;
+  justify-content: flex-end;
+}
+.share-button {
+  background: var(--c-blue);
+  color: var(--c-bg);
+  border: none;
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+
+  box-shadow:
+    0 6px 14px rgba(0,0,0,0.18),
+    0 3px 6px rgba(0,0,0,0.12);
+} 
+.spinner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(245,243,243,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000000;
+}
+.spinner {
+  border: 6px solid var(--c-bg);
+  border-top: 6px solid var(--c-blue);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 body, .main-bg {
   background: var(--c-bg);
 }
@@ -220,7 +372,7 @@ h1 {
 .intro p {
   color: var(--c-font);
   font-size: 1.15em;
-  margin-bottom: 2em;
+  margin-bottom: 1rem;
 }
 
 button {
@@ -280,7 +432,7 @@ ul {
   width: 85%;
   max-width: 900px;
   height: 27rem;
-  margin: 2rem auto;
+  margin: 1rem auto;
   border: 0.375rem solid var(--c-font);
   border-radius: 1rem;
   overflow: hidden;
@@ -289,5 +441,29 @@ ul {
 .map {
   height: 100%;
   width: 100%;
+}
+
+.closest-churches {
+  width: 85%;
+  max-width: 900px;
+  margin: 0 auto 2rem auto;
+  gap: 0.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.church-near-me {
+  background: var(--c-white);
+  color: var(--c-font);
+  padding: 0.75em;
+  border-radius: 1rem;
+}
+
+.footer {
+  background-color: var(--c-blue);
+  color: var(--c-white);
+  text-align: center;
+  padding: 1em;
+  padding-bottom: 2rem;
 }
 </style>
