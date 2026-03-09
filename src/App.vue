@@ -17,27 +17,30 @@
         <button @click="searchByAddress">Search</button>
       </div>
     </center-div>
-    <l-map :zoom="mapZoom" :center="mapCenter" style="height: 500px; width: 100%">
-      <l-tile-layer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution="&copy; <a href='https://osm.org/copyright'>OpenStreetMap</a> contributors"
-      />
-      <l-marker
-        v-for="(church, idx) in filteredChurches"
-        :key="church.name || idx"
-        :lat-lng="[church.latitude, church.longitude]"
-        :icon="churchIcon"
-      >
-        <l-popup>
-          <strong>{{ church.name }}</strong><br />
-          {{ church.address }}<br />
-          {{ church.phone }}
-        </l-popup>
-      </l-marker>
-      <l-marker v-if="userLocation" :lat-lng="userLocation" :icon="personIcon">
-        <l-popup>Your Location</l-popup>
-      </l-marker>
-    </l-map>
+    <div class="map-container">
+      <l-map :zoom="mapZoom" :center="mapCenter" class="map">
+        <l-tile-layer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution="&copy; <a href='https://osm.org/copyright'>OpenStreetMap</a> contributors"
+        />
+        <l-marker
+          v-for="(church, idx) in filteredChurches"
+          :key="church.name || idx"
+          :lat-lng="[church.latitude, church.longitude]"
+          :icon="churchIcon"
+        >
+          <l-popup>
+            <strong>{{ church.name }}</strong><br />
+            {{ church.address }}<br />
+            {{ church.phone }}
+          </l-popup>
+        </l-marker>
+
+        <l-marker v-if="userLocation" :lat-lng="userLocation" :icon="personIcon">
+          <l-popup>Your Location</l-popup>
+        </l-marker>
+      </l-map>
+    </div>
     <div v-if="closestChurches.length">
       <h2>Closest Churches:</h2>
       <ul>
@@ -271,5 +274,20 @@ ul {
 
 .enter-address {
   width: 90%;
+}
+
+.map-container {
+  width: 85%;
+  max-width: 900px;
+  height: 27rem;
+  margin: 2rem auto;
+  border: 0.375rem solid var(--c-font);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.map {
+  height: 100%;
+  width: 100%;
 }
 </style>
