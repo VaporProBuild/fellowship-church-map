@@ -63,11 +63,11 @@
           </div>
         </div>
     </div>
-    <div v-else>
+    <div v-else-if="searched" class="no-results">
       <span class="closest-church-title">No Churches Within {{ radius }} km please increase the radius.</span>
     </div>
     <div class="footer">
-      This is a prototype built by Schaefer Software. For feedback or questions, please contact <a href="mailto:schaefersoftwaresolutions@gmail.com">schaefersoftwaresolutions@gmail.com</a>.
+      This is a prototype built by Schaefer Software. For feedback or questions, please contact: <a href="mailto:schaefersoftwaresolutions@gmail.com">schaefersoftwaresolutions@gmail.com</a>
     </div>
   </div>
 </template>
@@ -122,7 +122,8 @@ export default {
       churchIcon: churchIcon,
       personIcon: personIcon,
       searchAddress: '',
-      loading: false
+      loading: false,
+      searched: false
     }
   },
   computed: {
@@ -154,108 +155,108 @@ export default {
         }
       }
     },
-    findClosestChurches() {
+    updateClosestChurches(lat, lon) {
+      this.userLocation = [lat, lon];
+
+      const distances = this.filteredChurches.map(church => ({
+        ...church,
+        distance: haversineDistance(
+          lat,
+          lon,
+          church.latitude,
+          church.longitude
+        )
+      }));
+
+      this.closestChurches = distances
+        .filter(church => church.distance <= this.radius)
+        .sort((a, b) => a.distance - b.distance);
+
+      this.updateMapView(lat, lon);
+    },
+    updateMapView(lat, lon) {
+      if (this.closestChurches.length > 0) {
+        const closest = this.closestChurches[0];
+        const midLat = (lat + closest.latitude) / 2;
+        const midLon = (lon + closest.longitude) / 2;
+
+        this.mapCenter = [midLat, midLon];
+        this.mapZoom = 14;
+      } else {
+        this.mapCenter = [lat, lon];
+        this.mapZoom = 12;
+      }
+
+      this.scrollToMap();
+    },
+    scrollToMap() {
+      this.$nextTick(() => {
+        const mapEl = this.$refs.churchMap?.$el;
+        if (mapEl) {
+          mapEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    },
+    async searchByAddress() {
       this.loading = true;
-      if (!navigator.geolocation) {
-        alert('Geolocation not supported');
+      this.searched = true;
+
+      if (!this.searchAddress) {
+        alert("Please enter an address");
         this.loading = false;
         return;
       }
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          this.userLocation = [pos.coords.latitude, pos.coords.longitude];
-          const distances = this.filteredChurches.map(church => ({
-            ...church,
-            distance: haversineDistance(
-              pos.coords.latitude,
-              pos.coords.longitude,
-              church.latitude,
-              church.longitude
-            )
-          }));
-          this.closestChurches = distances
-            .filter(church => church.distance <= this.radius)
-            .sort((a, b) => a.distance - b.distance);
-          if (this.closestChurches.length > 0) {
-            const closest = this.closestChurches[0];
-            const midLat = (pos.coords.latitude + closest.latitude) / 2;
-            const midLon = (pos.coords.longitude + closest.longitude) / 2;
-            this.mapCenter = [midLat, midLon];
-            this.mapZoom = 14;
-          } else {
-            this.mapCenter = [pos.coords.latitude, pos.coords.longitude];
-            this.mapZoom = 12;
-          }
+
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.searchAddress)}`;
+        const response = await fetch(url);
+        const results = await response.json();
+
+        if (!results.length) {
+          alert("Address not found");
           this.loading = false;
-          this.$nextTick(() => {
-            const mapEl = this.$refs.churchMap?.$el;
-            if (mapEl) {
-              mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          });
-        },
-        err => {
-          alert('Could not get location. Error: ' + err.message);
-          this.loading = false;
+          return;
         }
-      );
+
+        const lat = parseFloat(results[0].lat);
+        const lon = parseFloat(results[0].lon);
+
+        this.updateClosestChurches(lat, lon);
+
+      } catch (err) {
+        console.error("Address search error:", err);
+        alert("Error searching address");
+      }
+
+      this.loading = false;
     },
     notSetup() {
       alert('This feature is not set up yet.');
     },
-    async searchByAddress() {
+    findClosestChurches() {
       this.loading = true;
-      if (!this.searchAddress) {
-        alert('Please enter an address');
+      this.searched = true;
+
+      if (!navigator.geolocation) {
+        alert("Geolocation not supported");
         this.loading = false;
         return;
       }
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.searchAddress)}`;
-      try {
-        const response = await fetch(url);
-        const results = await response.json();
-        if (!results.length) {
-          alert('Address not found');
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+
+          this.updateClosestChurches(lat, lon);
+
           this.loading = false;
-          return;
+        },
+        err => {
+          alert("Could not get location. Error: " + err.message);
+          this.loading = false;
         }
-        const lat = parseFloat(results[0].lat);
-        const lon = parseFloat(results[0].lon);
-        this.userLocation = [lat, lon];
-        const distances = this.filteredChurches.map(church => ({
-          ...church,
-          distance: haversineDistance(
-            lat,
-            lon,
-            church.latitude,
-            church.longitude
-          )
-        }));
-        this.closestChurches = distances
-          .filter(church => church.distance <= this.radius)
-          .sort((a, b) => a.distance - b.distance);
-        if (this.closestChurches.length > 0) {
-          const closest = this.closestChurches[0];
-          const midLat = (lat + closest.latitude) / 2;
-          const midLon = (lon + closest.longitude) / 2;
-          this.mapCenter = [midLat, midLon];
-          this.mapZoom = 14;
-        } else {
-          this.mapCenter = [lat, lon];
-          this.mapZoom = 12;
-        }
-        this.loading = false;
-        this.$nextTick(() => {
-          const mapEl = this.$refs.churchMap?.$el;
-          if (mapEl) {
-            mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        });
-      } catch (err) {
-        alert('Error searching address');
-        this.loading = false;
-        console.error('Address search error:', err);
-      }
+      );
     },
     updateRadius() {
       // Recalculate closest churches if userLocation is set
@@ -280,6 +281,10 @@ export default {
 </script>
 
 <style scoped>
+.no-results {
+  margin-bottom: 3rem;
+}
+
 .radius-slider {
   width: 85%;
   max-width: 900px;
@@ -465,5 +470,6 @@ ul {
   text-align: center;
   padding: 1em;
   padding-bottom: 2rem;
+  font-weight: bold;
 }
 </style>
