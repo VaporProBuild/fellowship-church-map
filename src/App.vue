@@ -1,7 +1,23 @@
 <template>
-  <div>
-    <h1>Fellowship Church Map Proof of Concept</h1>
-  <l-map :zoom="mapZoom" :center="mapCenter" style="height: 500px; width: 100%">
+  <div class="main-bg">
+    <div class="header">
+      NOTICE: This is a Prototype for the Fellowship of Evangelical Baptists (FEB) Church Finder in Central Canada. It is built using Vue.js and Leaflet for mapping. The church data is sourced from a JSON file containing information about 70% of FEB churches, including their names, addresses, phone numbers, and geographic coordinates.
+    </div>
+    <div class="intro">
+      <h1>Find a Church Near You!</h1>
+      <p>
+        Welcome to the Feb Central Church Finder! This site helps you connect with churches near you that are part of the Fellowship of Evangelical Baptists (FEB) in Central Canada.<br>
+        Enter your address or use your location to discover the closest FEB churches and get connected.
+      </p>
+    </div>
+    <button @click="findClosestChurches">Auto Find Closest Churches</button>
+    <center-div>
+      <div class="enter-address">
+        <input v-model="searchAddress" placeholder="Enter address" class="enter-box" />
+        <button @click="searchByAddress">Search</button>
+      </div>
+    </center-div>
+    <l-map :zoom="mapZoom" :center="mapCenter" style="height: 500px; width: 100%">
       <l-tile-layer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; <a href='https://osm.org/copyright'>OpenStreetMap</a> contributors"
@@ -10,6 +26,7 @@
         v-for="(church, idx) in filteredChurches"
         :key="church.name || idx"
         :lat-lng="[church.latitude, church.longitude]"
+        :icon="churchIcon"
       >
         <l-popup>
           <strong>{{ church.name }}</strong><br />
@@ -17,11 +34,10 @@
           {{ church.phone }}
         </l-popup>
       </l-marker>
-      <l-marker v-if="userLocation" :lat-lng="userLocation" :icon="yellowIcon">
+      <l-marker v-if="userLocation" :lat-lng="userLocation" :icon="personIcon">
         <l-popup>Your Location</l-popup>
       </l-marker>
     </l-map>
-    <button @click="findClosestChurches">Find Closest Churches</button>
     <div v-if="closestChurches.length">
       <h2>Closest Churches:</h2>
       <ul>
@@ -29,10 +45,6 @@
           {{ church.name }} - {{ church.address }} ({{ church.distance.toFixed(2) }} km away)
         </li>
       </ul>
-    </div>
-    <div style="margin: 1em 0;">
-      <input v-model="searchAddress" placeholder="Enter address" style="width: 300px;" />
-      <button @click="searchByAddress">Search by Address</button>
     </div>
   </div>
 </template>
@@ -46,13 +58,18 @@ import febChurches from './febChurches.json'
 import 'leaflet/dist/leaflet.css';
 L.Icon.Default.imagePath = 'https://unpkg.com/leaflet@1.9.4/dist/images/';
 
-const yellowIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-yellow.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+// Church icon (local SVG)
+const churchIcon = new L.Icon({
+  iconUrl: '/fellowship-church-map/churchIcon.svg',
+  iconSize: [62, 62],
+  popupAnchor: [1, -34]
+});
+
+// Person icon (local SVG)
+const personIcon = new L.Icon({
+  iconUrl: '/fellowship-church-map/person.svg',
+  iconSize: [45, 45],
+  popupAnchor: [1, -34]
 });
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -78,7 +95,8 @@ export default {
       showClosest: false,
       mapCenter: [43.7, -79.4],
       mapZoom: 7,
-      yellowIcon: yellowIcon,
+      churchIcon: churchIcon,
+      personIcon: personIcon,
       searchAddress: ''
     }
   },
@@ -100,8 +118,6 @@ export default {
         pos => {
           console.log('User location found:', pos.coords);
           this.userLocation = [pos.coords.latitude, pos.coords.longitude];
-          this.mapCenter = [pos.coords.latitude, pos.coords.longitude];
-          this.mapZoom = 12;
           // Calculate distances
           const distances = this.filteredChurches.map(church => ({
             ...church,
@@ -114,6 +130,17 @@ export default {
           }));
           // Sort by distance and take top 5
           this.closestChurches = distances.sort((a, b) => a.distance - b.distance).slice(0, 5);
+          // Zoom to midpoint between user and closest church
+          if (this.closestChurches.length > 0) {
+            const closest = this.closestChurches[0];
+            const midLat = (pos.coords.latitude + closest.latitude) / 2;
+            const midLon = (pos.coords.longitude + closest.longitude) / 2;
+            this.mapCenter = [midLat, midLon];
+            this.mapZoom = 14;
+          } else {
+            this.mapCenter = [pos.coords.latitude, pos.coords.longitude];
+            this.mapZoom = 12;
+          }
         },
         err => {
           alert('Could not get location. Error: ' + err.message);
@@ -137,8 +164,6 @@ export default {
         const lat = parseFloat(results[0].lat);
         const lon = parseFloat(results[0].lon);
         this.userLocation = [lat, lon];
-        this.mapCenter = [lat, lon];
-        this.mapZoom = 12;
         // Calculate distances
         const distances = this.filteredChurches.map(church => ({
           ...church,
@@ -150,6 +175,17 @@ export default {
           )
         }));
         this.closestChurches = distances.sort((a, b) => a.distance - b.distance).slice(0, 5);
+        // Zoom to midpoint between user and closest church
+        if (this.closestChurches.length > 0) {
+          const closest = this.closestChurches[0];
+          const midLat = (lat + closest.latitude) / 2;
+          const midLon = (lon + closest.longitude) / 2;
+          this.mapCenter = [midLat, midLon];
+          this.mapZoom = 14;
+        } else {
+          this.mapCenter = [lat, lon];
+          this.mapZoom = 12;
+        }
       } catch (err) {
         alert('Error searching address');
         console.error('Address search error:', err);
@@ -160,8 +196,80 @@ export default {
 </script>
 
 <style scoped>
-#map {
-  height: 500px;
-  width: 100%;
+body, .main-bg {
+  background: var(--c-bg);
+}
+
+.intro {
+  background: var(--c-bg);
+  color: var(--c-font);
+  padding: 2em 1em 1em 1em;
+  text-align: center;
+}
+
+h1 {
+  color: var(--c-blue);
+  text-align: center;
+  margin: 1em 0 0.5em 0;
+  font-family: 'Avenir', Helvetica, Arial, sans-serif;
+}
+
+.intro p {
+  color: var(--c-font);
+  font-size: 1.15em;
+  margin-bottom: 2em;
+}
+
+button {
+  background: var(--c-blue);
+  color: var(--c-bg);
+  border: none;
+  border-radius: 6px;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  margin: 0.5em;
+  cursor: pointer;
+
+  box-shadow:
+    0 0.5rem 1rem rgba(0,0,0,0.12),
+    0 0.75rem 1.5rem rgba(0,0,0,0.16);
+}
+
+button:hover {
+  background: var(--c-font);
+}
+
+input {
+  border: 1px solid var(--c-font);
+  border-radius: 6px;
+  padding: 0.5em;
+  font-size: 1em;
+  color: var(--c-blue);
+  background: var(--c-white);
+}
+
+h2 {
+  color: var(--c-blue);
+  margin-top: 1em;
+}
+
+ul {
+  color: var(--c-font);
+  font-size: 1.05em;
+}
+
+.header {
+  background: yellow;
+  color: black;
+  font-weight: bold;
+  padding: 1em;
+  text-align: center;
+  font-size: 0.9em;
+  border-bottom-left-radius: 1.5rem;
+  border-bottom-right-radius: 1.5rem;
+}
+
+.enter-address {
+  width: 90%;
 }
 </style>

@@ -1,0 +1,28 @@
+/* Centralized color palette */
+
+:root {
+    --c-blue: #002045;
+    --c-font: #5d7196;
+    --c-bg: #f5f3f3;
+    --c-white: #fff;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+}
+
+#app {
+    font-family: 'Avenir', Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-align: center;
+    color: var(--c-font);
+    background: var(--c-bg);
+}
+
+center-div {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
