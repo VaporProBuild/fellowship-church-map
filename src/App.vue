@@ -472,4 +472,9 @@ ul {
   padding-bottom: 2rem;
   font-weight: bold;
 }
+
+.footer a {
+  color: var(--c-white);
+  text-decoration: underline;
+}
 </style>
